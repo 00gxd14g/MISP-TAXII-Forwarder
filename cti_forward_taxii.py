@@ -94,8 +94,7 @@ def push_stix_package_to_taxii(filepath):
     # Push the STIX package to the TAXII server
     with open(filepath, "r", encoding='utf-8') as file:
         stix_package_str = file.read()
-        
-    response = client.push(
+response = client.push(
         content=stix_package_str,
         content_binding="urn:stix.mitre.org:xml:1.1.1",
         collection_names=[''],
@@ -103,6 +102,7 @@ def push_stix_package_to_taxii(filepath):
     )
 
     return response
+
 
 def main():
     """Main function."""
@@ -166,5 +166,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
