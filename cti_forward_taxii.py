@@ -1,8 +1,8 @@
-# CTI EXTRACTOR FOR MISP AND FORWADING STIXX FILE IN TAXI SERVER 
-
-import os
+"""
+CTI Extractor for MISP and forwarding STIX file in TAXII server.
+"""
+import datetime
 import time
-import json
 from pymisp import PyMISP
 from stix.core import STIXPackage
 from stix.indicator import Indicator
@@ -11,25 +11,39 @@ from cybox.objects.domain_name_object import DomainName
 from cybox.objects.uri_object import URI
 from cybox.objects.file_object import File
 from cabby import create_client
-import datetime
+
 
 def log(message):
+    """Log messages with timestamp."""
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open("result.log", "a") as log_file:
+    with open("result.log", "a", encoding='utf-8') as log_file:
         log_file.write(f"{now} {message}\n")
     print(f"{now} {message}")
-    
+
+
 def get_misp_events(misp, tag_to_search, last_processed_event_id):
-    events = misp.search(controller='events', tags=tag_to_search, to_ids=True, last=None,enforceWarninglist=True)
+    """Get MISP events by tag and filtered by last_processed_event_id."""
+    events = misp.search(
+        controller='events',
+        tags=tag_to_search,
+        to_ids=True,
+        last=None,
+        enforceWarninglist=True
+    )
     return [event for event in events if int(event['Event']['id']) < last_processed_event_id]
 
+
 class CustomDomainName(DomainName):
+    """Custom Domain Name class."""
+
     def __init__(self, value=None, *args, **kwargs):
-        super(CustomDomainName, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         if value is not None:
             self.value = value
 
+
 def process_events(events):
+    """Process MISP events and convert them into STIX packages."""
     stix_package = STIXPackage()
 
     for event in events:
@@ -54,11 +68,15 @@ def process_events(events):
 
     return stix_package
 
+
 def save_stix_package_to_file(stix_package, filepath):
-    with open(filepath, "w") as f:
-        f.write(stix_package.to_xml(encoding='utf-8').decode('utf-8'))
+    """Save STIX package to a file."""
+    with open(filepath, "w", encoding='utf-8') as file:
+        file.write(stix_package.to_xml(encoding='utf-8').decode('utf-8'))
+
 
 def push_stix_package_to_taxii(filepath):
+    """Push STIX package to TAXII server."""
     # TAXII server configuration
     taxii_url = ""
     taxii_discovery_path = ""
@@ -70,18 +88,24 @@ def push_stix_package_to_taxii(filepath):
     client = create_client(
         discovery_path=taxii_url + taxii_discovery_path,
         use_https=False,
-        #verify_ssl=False,
     )
     client.set_auth(username=taxii_username, password=taxii_password)
 
     # Push the STIX package to the TAXII server
-    with open(filepath, "r") as f:
-        stix_package_str = f.read()
-    response = client.push(content=stix_package_str, content_binding="urn:stix.mitre.org:xml:1.1.1", collection_names=[''], uri=taxii_url + taxii_inbox_path)
+    with open(filepath, "r", encoding='utf-8') as file:
+        stix_package_str = file.read()
+        
+    response = client.push(
+        content=stix_package_str,
+        content_binding="urn:stix.mitre.org:xml:1.1.1",
+        collection_names=[''],
+        uri=taxii_url + taxii_inbox_path
+    )
 
     return response
 
 def main():
+    """Main function."""
     # Replace with your MISP API key and URL
     misp_api_key = ""
     misp_url = ""
@@ -93,16 +117,16 @@ def main():
     while True:
         # Get the processed_event_ids
         try:
-            with open("processed_events_ids.txt", "r") as f:
-                processed_event_ids = set(map(int, f.read().splitlines()))
+            with open("processed_events_ids.txt", "r", encoding='utf-8') as file:
+                processed_event_ids = set(map(int, file.read().splitlines()))
         except FileNotFoundError:
             processed_event_ids = set()
-            with open("processed_events_ids.txt", "w") as f:
+            with open("processed_events_ids.txt", "w", encoding='utf-8') as file:
                 pass
 
         last_processed_event_id = max(processed_event_ids) if processed_event_ids else 0
         events = get_misp_events(misp, tag_to_search, last_processed_event_id)
-        
+
         new_events = [event for event in events if int(event['Event']['id']) not in processed_event_ids]
 
         if not new_events:
@@ -124,20 +148,23 @@ def main():
                         log("STIX package successfully pushed to the TAXII server.")
                     else:
                         log(f"Failed to push STIX package to the TAXII server. Status code: {response.status}")
-                except Exception as e:
-                    log(f"Error while pushing STIX package to TAXII server: {str(e)}")
+                except Exception as error:
+                    log(f"Error while pushing STIX package to TAXII server: {str(error)}")
 
             # Update the processed_event_ids
             for event in new_events:
                 processed_event_ids.add(int(event['Event']['id']))
 
             # Save the processed_event_ids
-            with open("processed_events_ids.txt", "w") as f:
+            with open("processed_events_ids.txt", "w", encoding='utf-8') as file:
                 for event_id in processed_event_ids:
-                    f.write(str(event_id) + "\n")
+                    file.write(str(event_id) + "\n")
 
             # Wait for a short period (e.g., 10 seconds) before checking for new events again
             time.sleep(1800)
 
+
 if __name__ == "__main__":
     main()
+
+
